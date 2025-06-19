@@ -1,3 +1,4 @@
+// lib/model/companion_model.dart
 class CompanionModel {
   final String id;
   final String sportName;
@@ -30,42 +31,42 @@ class CompanionModel {
     required this.latitude,
     required this.longitude,
   });
-}
 
-class GroupModel {
-  final String groupId;
-  final String eventId;
-  final String groupName;
-  final String organiserName;
-  final List<String> members;
+  factory CompanionModel.fromJson(Map<String, dynamic> json) {
+    return CompanionModel(
+      id: json['id'] ?? '',
+      sportName: json['sportName'] ?? '',
+      logoPath: json['logoPath'] ?? 'assets/images/default.jpg',
+      organiserName: json['organiserName'] ?? '',
+      venue: json['venue'] ?? '',
+      city: json['city'] ?? '',
+      description: json['description'] ?? '',
+      date: json['date'] ?? '',
+      time: json['time'] ?? '',
+      gender: json['gender'] ?? 'All',
+      ageLimit: json['ageLimit'] ?? '18-25',
+      paidStatus: json['paidStatus'] ?? 'Unpaid',
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
 
-  GroupModel({
-    required this.groupId,
-    required this.eventId,
-    required this.groupName,
-    required this.organiserName,
-    required this.members,
-  });
-}
-
-class PendingRequest {
-  final String userName;
-  final String groupId;
-
-  PendingRequest({
-    required this.userName,
-    required this.groupId,
-  });
-}
-
-class MessageModel {
-  final String sender;
-  final String text;
-  final String timestamp;
-
-  MessageModel({
-    required this.sender,
-    required this.text,
-    required this.timestamp,
-  });
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'sportName': sportName,
+      'logoPath': logoPath,
+      'organiserName': organiserName,
+      'venue': venue,
+      'city': city,
+      'description': description,
+      'date': date,
+      'time': time,
+      'gender': gender,
+      'ageLimit': ageLimit,
+      'paidStatus': paidStatus,
+      'latitude': latitude,
+      'longitude': longitude,
+    };
+  }
 }
