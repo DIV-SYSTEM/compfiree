@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../model/companion_model.dart';
 import '../utils/constants.dart';
 import '../utils/validators.dart';
-import 'map_picker_screen.dart';
+import 'map_picker-screen.dart';
 import '../services/firebase_service.dart'; // Add this import
 import 'package:provider/provider.dart'; // Add this import
 import '../providers/user_provider.dart'; // Add this import
