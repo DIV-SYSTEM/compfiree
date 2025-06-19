@@ -1,18 +1,19 @@
+// lib/screen/create_requirement_form.dart
 import 'package:flutter/material.dart';
 import '../model/companion_model.dart';
-import '../data/companion_data.dart';
 import '../utils/constants.dart';
 import '../utils/validators.dart';
-import 'map_picker-screen.dart';
+import 'map_picker_screen.dart';
+import '../services/firebase_service.dart'; // Add this import
+import 'package:provider/provider.dart'; // Add this import
+import '../providers/user_provider.dart'; // Add this import
 
 class CreateRequirementForm extends StatefulWidget {
   final String currentUser;
-  final Function(CompanionModel, GroupModel) onCreate;
 
   const CreateRequirementForm({
     super.key,
     required this.currentUser,
-    required this.onCreate,
   });
 
   @override
@@ -23,15 +24,13 @@ class _CreateRequirementFormState extends State<CreateRequirementForm> {
   final _formKey = GlobalKey<FormState>();
   String? sportName;
   final TextEditingController organiserController = TextEditingController();
-  final TextEditingController groupNameController = TextEditingController();
   final TextEditingController venueController = TextEditingController();
   final TextEditingController cityController = TextEditingController();
-  String? description; // Changed from TextEditingController to String
+  String? description;
   DateTime? selectedDate;
   TimeOfDay? selectedTime;
   double? latitude;
   double? longitude;
-
   String? gender;
   String? ageLimit;
   String? paidStatus;
@@ -77,7 +76,7 @@ class _CreateRequirementFormState extends State<CreateRequirementForm> {
     }
   }
 
-  void _submitForm() {
+  void _submitForm() async {
     if (_formKey.currentState!.validate() &&
         selectedDate != null &&
         selectedTime != null &&
@@ -88,12 +87,15 @@ class _CreateRequirementFormState extends State<CreateRequirementForm> {
         latitude != null &&
         longitude != null &&
         description != null) {
-      final eventId = "event${companionData.length + 1}";
-      final groupId = "group${groupData.length + 1}";
+      final user = Provider.of<UserProvider>(context, listen: false).user;
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("User not logged in")),
+        );
+        return;
+      }
+      final eventId = "event_${DateTime.now().millisecondsSinceEpoch}";
       final organiserName = organiserController.text.trim();
-      final groupName = groupNameController.text.trim().isEmpty
-          ? "$sportName Group by $organiserName"
-          : groupNameController.text.trim();
       final newRequirement = CompanionModel(
         id: eventId,
         sportName: sportName!,
@@ -101,7 +103,7 @@ class _CreateRequirementFormState extends State<CreateRequirementForm> {
         organiserName: organiserName,
         venue: venueController.text.trim(),
         city: cityController.text.trim(),
-        description: description!, // Updated to use description string
+        description: description!,
         date:
             "${selectedDate!.year}-${selectedDate!.month.toString().padLeft(2, '0')}-${selectedDate!.day.toString().padLeft(2, '0')}",
         time: selectedTime!.format(context),
@@ -111,15 +113,19 @@ class _CreateRequirementFormState extends State<CreateRequirementForm> {
         latitude: latitude!,
         longitude: longitude!,
       );
-      final newGroup = GroupModel(
-        groupId: groupId,
-        eventId: eventId,
-        groupName: groupName,
-        organiserName: organiserName,
-        members: [organiserName],
-      );
-      widget.onCreate(newRequirement, newGroup);
-      Navigator.pop(context);
+
+      try {
+        final firebaseService = FirebaseService();
+        await firebaseService.saveCompanionCard(user.id, newRequirement);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Companion card created!")),
+        );
+        Navigator.pop(context);
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to create card: $e")),
+        );
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill all required fields")),
@@ -165,15 +171,6 @@ class _CreateRequirementFormState extends State<CreateRequirementForm> {
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
-                  controller: groupNameController,
-                  decoration: const InputDecoration(
-                    labelText: "Group Name (optional)",
-                    prefixIcon: Icon(Icons.group),
-                    hintText: "e.g., Weekend Warriors",
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
                   controller: venueController,
                   readOnly: true,
                   decoration: const InputDecoration(
@@ -216,7 +213,7 @@ class _CreateRequirementFormState extends State<CreateRequirementForm> {
                       value: desc,
                       child: Text(
                         desc,
-                        overflow: TextOverflow.ellipsis, // Prevents text overflow
+                        overflow: TextOverflow.ellipsis,
                       ),
                     );
                   }).toList(),
