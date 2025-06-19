@@ -1,3 +1,4 @@
+// lib/services/firebase_service.dart
 import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_database/firebase_database.dart';
@@ -5,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../model/user_model.dart';
+import '../model/companion_model.dart'; // Add this import
 
 class FirebaseService {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
@@ -22,7 +24,6 @@ class FirebaseService {
           if (userData['email'] == email &&
               userData['password'] == _hashPassword(password)) {
             final user = UserModel.fromJson(entry.key as String, userData);
-            // Store imageUrl in SharedPreferences for local access
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString('user_${user.id}_image', user.imageUrl ?? '');
             return user;
@@ -31,28 +32,20 @@ class FirebaseService {
       }
       throw Exception('Invalid email or password');
     } catch (e) {
-      if (kDebugMode) {
-        print('Login error: $e');
-      }
+      if (kDebugMode) print('Login error: $e');
       throw Exception('Login failed: $e');
     }
   }
 
   Future<void> registerUser(UserModel user, File? image) async {
     try {
-      if (kDebugMode) {
-        print('Starting user registration: ${user.email}');
-      }
-
+      if (kDebugMode) print('Starting user registration: ${user.email}');
       String? imageUrl;
       if (image != null) {
         if (!await image.exists()) {
           throw Exception('Image file does not exist: ${image.path}');
         }
-        if (kDebugMode) {
-          print('Converting image to base64: ${image.path}');
-        }
-        // Convert image to base64
+        if (kDebugMode) print('Converting image to base64: ${image.path}');
         final bytes = await image.readAsBytes();
         imageUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
       }
@@ -66,33 +59,56 @@ class FirebaseService {
         imageUrl: imageUrl,
       ).toJson();
 
-      if (kDebugMode) {
-        print('Saving user data to Realtime Database: $userData');
-      }
-
-      // Save user data to Firebase Realtime Database
+      if (kDebugMode) print('Saving user data to Realtime Database: $userData');
       await _db.child('users/${user.id}').set(userData).timeout(
             const Duration(seconds: 30),
             onTimeout: () => throw Exception('Database write timed out'),
           );
 
-      // Save image to SharedPreferences
       if (imageUrl != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_${user.id}_image', imageUrl);
-        if (kDebugMode) {
-          print('Image saved to SharedPreferences for user: ${user.id}');
-        }
+        if (kDebugMode) print('Image saved to SharedPreferences for user: ${user.id}');
       }
-
-      if (kDebugMode) {
-        print('User registration successful');
-      }
+      if (kDebugMode) print('User registration successful');
     } catch (e) {
-      if (kDebugMode) {
-        print('Registration error: $e');
-      }
+      if (kDebugMode) print('Registration error: $e');
       throw Exception('Registration failed: $e');
+    }
+  }
+
+  // New method to save companion card
+  Future<void> saveCompanionCard(String userId, CompanionModel card) async {
+    try {
+      final cardData = card.toJson();
+      await _db.child('companion_cards/$userId/${card.id}').set(cardData).timeout(
+            const Duration(seconds: 30),
+            onTimeout: () => throw Exception('Database write timed out'),
+          );
+      if (kDebugMode) print('Saved companion card: ${card.id} for user: $userId');
+    } catch (e) {
+      if (kDebugMode) print('Save companion card error: $e');
+      throw Exception('Failed to save companion card: $e');
+    }
+  }
+
+  // New method to fetch companion cards for a user
+  Future<List<CompanionModel>> getCompanionCards(String userId) async {
+    try {
+      final snapshot = await _db.child('companion_cards/$userId').get().timeout(
+            const Duration(seconds: 30),
+            onTimeout: () => throw Exception('Database fetch timed out'),
+          );
+      if (snapshot.exists) {
+        final cards = snapshot.value as Map<dynamic, dynamic>;
+        return cards.entries.map((entry) {
+          return CompanionModel.fromJson(entry.value as Map<String, dynamic>);
+        }).toList();
+      }
+      return [];
+    } catch (e) {
+      if (kDebugMode) print('Fetch companion cards error: $e');
+      throw Exception('Failed to fetch companion cards: $e');
     }
   }
 
