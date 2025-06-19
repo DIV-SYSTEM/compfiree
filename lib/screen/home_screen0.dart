@@ -1,6 +1,6 @@
+// lib/screen/home_screen0.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../data/companion_data.dart';
 import '../widgets/companion_card.dart';
 import '../widgets/circular_avatar.dart';
 import '../model/companion_model.dart';
@@ -9,6 +9,7 @@ import 'create_requirement_form.dart';
 import 'view_groups_screen.dart';
 import 'profile_screen.dart';
 import '../services/location_filter_service.dart';
+import '../services/firebase_service.dart'; // Add this import
 
 class Home_Sport extends StatefulWidget {
   final String initialUser;
@@ -29,19 +30,35 @@ class _Home_SportState extends State<Home_Sport> {
   double distanceFilterKm = 0;
   late String currentUser;
 
-  List<CompanionModel> filteredData = companionData;
+  List<CompanionModel> filteredData = [];
   final LocationFilterService _locationService = LocationFilterService();
+  final FirebaseService _firebaseService = FirebaseService(); // Add this
 
   final TextEditingController dateController = TextEditingController();
   final TextEditingController newUserController = TextEditingController();
-
-  final List<String> allCities = {...companionData.map((e) => e.city)}.toList();
 
   @override
   void initState() {
     super.initState();
     currentUser = widget.initialUser;
     print("HomeScreen: Initialized with currentUser = $currentUser");
+    _fetchCompanionCards(); // Fetch cards on init
+  }
+
+  Future<void> _fetchCompanionCards() async {
+    final user = Provider.of<UserProvider>(context, listen: false).user;
+    if (user != null) {
+      try {
+        final cards = await _firebaseService.getCompanionCards(user.id);
+        setState(() {
+          filteredData = cards;
+        });
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to load cards: $e")),
+        );
+      }
+    }
   }
 
   void _pickDate() async {
@@ -62,35 +79,41 @@ class _Home_SportState extends State<Home_Sport> {
   }
 
   Future<void> _applyFilter() async {
-    setState(() {
-      filteredData = companionData;
-    });
+    final user = Provider.of<UserProvider>(context, listen: false).user;
+    if (user == null) return;
 
-    final distanceFilteredData = await _locationService.filterByDistance(distanceFilterKm);
+    try {
+      final cards = await _firebaseService.getCompanionCards(user.id);
+      final distanceFilteredData = await _locationService.filterByDistance(distanceFilterKm);
 
-    setState(() {
-      filteredData = distanceFilteredData.where((item) {
-        final matchesCity = distanceFilterKm == 0 ? (selectedCity == null || item.city == selectedCity) : true;
-        final matchesSport = selectedSport == null || item.sportName == selectedSport;
-        final matchesDate = selectedDate == null || item.date == dateController.text;
-        final matchesGender = selectedGender == null || item.gender == selectedGender;
-        final matchesAge = selectedAgeLimit == null || item.ageLimit == selectedAgeLimit;
-        final matchesPaid = selectedPaidStatus == null || item.paidStatus == selectedPaidStatus;
+      setState(() {
+        filteredData = cards.where((item) {
+          final matchesCity = distanceFilterKm == 0 ? (selectedCity == null || item.city == selectedCity) : true;
+          final matchesSport = selectedSport == null || item.sportName == selectedSport;
+          final matchesDate = selectedDate == null || item.date == dateController.text;
+          final matchesGender = selectedGender == null || item.gender == selectedGender;
+          final matchesAge = selectedAgeLimit == null || item.ageLimit == selectedAgeLimit;
+          final matchesPaid = selectedPaidStatus == null || item.paidStatus == selectedPaidStatus;
 
-        return matchesCity && matchesSport && matchesDate && matchesGender && matchesAge && matchesPaid;
-      }).toList();
+          return matchesCity && matchesSport && matchesDate && matchesGender && matchesAge && matchesPaid;
+        }).toList();
 
-      if (distanceFilterKm > 0) {
-        final userLocation = _locationService.getUserLocation();
-        userLocation.then((location) {
-          if (location == null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Location permission denied. Showing all results.")),
-            );
-          }
-        });
-      }
-    });
+        if (distanceFilterKm > 0) {
+          final userLocation = _locationService.getUserLocation();
+          userLocation.then((location) {
+            if (location == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Location permission denied. Showing all results.")),
+              );
+            }
+          });
+        }
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to apply filters: $e")),
+      );
+    }
   }
 
   void _resetFilter() {
@@ -103,7 +126,7 @@ class _Home_SportState extends State<Home_Sport> {
       selectedPaidStatus = null;
       distanceFilterKm = 0;
       dateController.clear();
-      filteredData = companionData;
+      _fetchCompanionCards(); // Reset to all user cards
     });
   }
 
@@ -133,21 +156,14 @@ class _Home_SportState extends State<Home_Sport> {
                 );
                 return;
               }
-              if (availableUsers.any((user) => user.toLowerCase() == newUser.toLowerCase())) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("User name already exists")),
-                );
-                return;
-              }
               setState(() {
-                availableUsers.add(newUser);
                 currentUser = newUser;
                 newUserController.clear();
-                print("Created user: $newUser, currentUser: $currentUser");
+                print("Switched to user: $currentUser");
               });
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("User $newUser created!")),
+                SnackBar(content: Text("User $newUser selected!")),
               );
             },
             child: const Text("Create"),
@@ -162,6 +178,7 @@ class _Home_SportState extends State<Home_Sport> {
       setState(() {
         currentUser = newUser;
         print("Switched to user: $currentUser");
+        _fetchCompanionCards(); // Refresh cards for new user
       });
     }
   }
@@ -281,8 +298,7 @@ class _Home_SportState extends State<Home_Sport> {
                     flex: 3,
                     child: DropdownButtonFormField<String>(
                       value: currentUser,
-                      items: availableUsers
-                          .map((user) => DropdownMenuItem(
+                      items: ['Demo User'].map((user) => DropdownMenuItem(
                                 value: user,
                                 child: Text(
                                   user,
@@ -318,16 +334,6 @@ class _Home_SportState extends State<Home_Sport> {
                           MaterialPageRoute(
                             builder: (_) => CreateRequirementForm(
                               currentUser: currentUser,
-                              onCreate: (CompanionModel newCompanion, GroupModel newGroup) {
-                                setState(() {
-                                  companionData.add(newCompanion);
-                                  groupData.add(newGroup);
-                                  filteredData = companionData;
-                                  print(
-                                      "Added to groupData: ${newGroup.groupId}, Name: ${newGroup.groupName}, Organiser: ${newGroup.organiserName}");
-                                  logGroupData("After adding group in home");
-                                });
-                              },
                             ),
                           ),
                         );
@@ -436,7 +442,7 @@ class _Home_SportState extends State<Home_Sport> {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
-                          _buildDropdown("City", selectedCity, allCities, (val) => setState(() => selectedCity = val)),
+                          _buildDropdown("City", selectedCity, ['Mumbai', 'Delhi', 'Bangalore'], (val) => setState(() => selectedCity = val)),
                           const SizedBox(width: 8),
                           _buildDropdown(
                               "Sport",
